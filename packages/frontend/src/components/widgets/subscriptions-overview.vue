@@ -203,6 +203,17 @@ const formatRowAmount = ({ sub }: { sub: SubscriptionListItem }) => {
   return `${getTransactionTypePrefix(sub.transactionType)}${amount}`;
 };
 
+// Equivalent in the user's base currency (e.g. a USD bill shown in CAD) for the
+// row amount. Null when the bill is already in the base currency or no rate is
+// available — the suffix is then omitted rather than rendered with a placeholder.
+const formatRowBaseAmount = ({ sub }: { sub: SubscriptionListItem }) => {
+  const { expectedAmount, expectedCurrencyCode } = sub;
+  const base = baseCurrency.value?.currencyCode;
+  if (expectedAmount == null || !expectedCurrencyCode || !base || expectedCurrencyCode === base) return null;
+  const converted = convert({ amount: expectedAmount, from: expectedCurrencyCode, to: base });
+  return converted == null ? null : formatBaseCurrency(converted);
+};
+
 const strip = computed(() =>
   buildPaymentsStrip({
     subscriptions: subscriptions.value,
@@ -403,6 +414,9 @@ function payPeriod({ subscription }: { subscription: SubscriptionListItem }) {
             </router-link>
             <span class="text-amount shrink-0 text-sm" :class="getTransactionTypeStyles(sub.transactionType, '')">
               {{ formatRowAmount({ sub }) }}
+              <span v-if="formatRowBaseAmount({ sub })" class="text-muted-foreground whitespace-nowrap text-xs font-normal">
+                ≈ {{ formatRowBaseAmount({ sub }) }}
+              </span>
             </span>
             <UiButton
               v-if="status && sub.currentPeriod"
