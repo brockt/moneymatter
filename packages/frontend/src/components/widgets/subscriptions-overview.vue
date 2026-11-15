@@ -19,7 +19,7 @@ import { buttonVariants } from '@/components/lib/ui/button';
 import UiButton from '@/components/lib/ui/button/Button.vue';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { DesktopOnlyTooltip } from '@/components/lib/ui/tooltip';
-import { maskAmountText } from '@/js/helpers/formatters';
+import { areAmountsHidden, maskAmountText } from '@/js/helpers/formatters';
 import { cn } from '@/lib/utils';
 import { ROUTES_NAMES } from '@/routes/constants';
 import { useCurrenciesStore, useRootStore } from '@/stores';
@@ -202,6 +202,19 @@ const formatRowAmount = ({ sub }: { sub: SubscriptionListItem }) => {
     ? formatAmountByCurrencyCode({ amount: sub.expectedAmount, currencyCode: sub.expectedCurrencyCode })
     : formatBaseCurrency(sub.expectedAmount);
   return maskAmountText({ text: `${getTransactionTypePrefix(sub.transactionType)}${amount}` });
+};
+
+// Equivalent in the user's base currency (e.g. a USD bill shown in CAD) for the
+// row amount. Null when the bill is already in the base currency or no rate is
+// available — the suffix is then omitted rather than rendered with a placeholder.
+const formatRowBaseAmount = ({ sub }: { sub: SubscriptionListItem }) => {
+  const { expectedAmount, expectedCurrencyCode } = sub;
+  const base = baseCurrency.value?.currencyCode;
+  if (areAmountsHidden.value || expectedAmount == null || !expectedCurrencyCode || !base || expectedCurrencyCode === base) {
+    return null;
+  }
+  const converted = convert({ amount: expectedAmount, from: expectedCurrencyCode, to: base });
+  return converted == null ? null : formatBaseCurrency(converted);
 };
 
 const strip = computed(() =>
@@ -404,6 +417,9 @@ function payPeriod({ subscription }: { subscription: SubscriptionListItem }) {
             </router-link>
             <span class="text-amount shrink-0 text-sm" :class="getTransactionTypeStyles(sub.transactionType, '')">
               {{ formatRowAmount({ sub }) }}
+              <span v-if="formatRowBaseAmount({ sub })" class="text-muted-foreground whitespace-nowrap text-xs font-normal">
+                ≈ {{ formatRowBaseAmount({ sub }) }}
+              </span>
             </span>
             <UiButton
               v-if="status && sub.currentPeriod"
