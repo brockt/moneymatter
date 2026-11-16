@@ -1,0 +1,3 @@
+services:
+  frontend:
+    image: moneymatter-frontend:pool-enabled
