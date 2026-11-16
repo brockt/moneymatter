@@ -43,3 +43,6 @@ coverage
 .dockerignore
 Dockerfile
 docker-compose*.yml
+
+# Runtime bind-mounted data is not part of image builds.
+self-hosting/data/

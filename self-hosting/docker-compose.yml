@@ -21,7 +21,7 @@
 # Pin the compose project name so resources are namespaced consistently
 # regardless of which directory `docker compose` is invoked from. Kept as
 # `budget-tracker-prod` so existing volumes/networks carry over on upgrade.
-name: budget-tracker-prod
+name: moneymatter
 
 x-logging: &default-logging
   driver: 'json-file'
@@ -53,7 +53,7 @@ services:
     # ./) to keep them on a NAS/shared mount instead. The backend runs as user
     # id 1001 and must be able to write to that directory – see ATTACHMENTS_PATH
     # in docs/environment-reference.md for how to grant that.
-    volumes: ['${ATTACHMENTS_PATH:-attachments_data}:/app/packages/backend/data/attachments']
+    volumes: ['./data/attachments:/app/packages/backend/data/attachments']
     environment:
       # Hardcoded, not read from .env: every stack started from this file is by
       # definition self-hosted, and `environment:` outranks `env_file:` so a
@@ -134,7 +134,7 @@ services:
     image: postgres:16
     restart: unless-stopped
     networks: [budget-tracker]
-    volumes: ['db_data:/var/lib/postgresql/data']
+    volumes: ['./data/postgres:/var/lib/postgresql/data']
     # Internal-only: nothing on the host needs Postgres. For admin access
     # (psql, backups) uncomment the ports line below — it binds to localhost
     # only, so it is never reachable from outside the machine.
@@ -153,7 +153,7 @@ services:
     image: redis:7
     restart: unless-stopped
     networks: [budget-tracker]
-    volumes: ['redis_data:/data']
+    volumes: ['./data/redis:/data']
     # Internal-only: nothing on the host needs Redis. For admin access
     # (redis-cli) uncomment the ports line below — it binds to localhost
     # only, so it is never reachable from outside the machine.
@@ -168,7 +168,7 @@ services:
     image: letehaha/currency-rates-api:latest
     restart: unless-stopped
     networks: [budget-tracker]
-    volumes: ['currency_rates_data:/app/data']
+    volumes: ['./data/currency-rates:/app/data']
     environment:
       - DATABASE_URL=sqlite:/app/data/currency_rates.db?mode=rwc
       - HOST=0.0.0.0
@@ -192,11 +192,6 @@ networks:
   budget-tracker:
     # Fixed name (instead of the compose-project-prefixed default) so external
     # reverse-proxy containers can join it by a stable, unambiguous name.
-    name: budget-tracker
+    name: moneymatter-network
     driver: bridge
 
-volumes:
-  db_data:
-  redis_data:
-  currency_rates_data:
-  attachments_data:

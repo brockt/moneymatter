@@ -230,7 +230,7 @@ export const trashedPlansOf = ({ plans }: { plans: BudgetPlanModel[] }): Trashed
     .sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
 
 /** Shows the pool / zero-sum switches in plan creation and plan settings. */
-export const BUDGET_POOL_ENABLED = false;
+export const BUDGET_POOL_ENABLED = true;
 
 export const cadenceLabel = ({
   cadence,
