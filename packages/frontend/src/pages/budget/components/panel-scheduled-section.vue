@@ -2,17 +2,37 @@
 import { useFormatCurrency } from '@/composable';
 import { useDateLocale } from '@/composable/use-date-locale';
 import { cn } from '@/lib/utils';
+import { useCurrenciesStore } from '@/stores';
 import { CalendarClockIcon, RepeatIcon } from '@lucide/vue';
+import { storeToRefs } from 'pinia';
 import { parseISO } from 'date-fns';
+import type { BudgetPlanScheduledItem } from '@bt/shared/types';
 
 import { type PanelContext, amountToneClass } from '../helpers';
 
 defineProps<{ context: PanelContext }>();
 
-const { formatBaseCurrency } = useFormatCurrency();
+const { formatBaseCurrency, formatAmountByCurrencyCode } = useFormatCurrency();
+const { baseCurrency } = storeToRefs(useCurrenciesStore());
 const { format } = useDateLocale();
 
 const formatDate = ({ date }: { date: string }) => format(parseISO(date), 'd MMM');
+
+// The Scheduled panel's amounts are converted to the plan currency server-side.
+// For bills in another currency (e.g. a USD subscription in a CAD plan), show
+// the billed amount with the CAD equivalent beside it; when the bill is already
+// in the base currency, show the single amount as before.
+const rowNative = ({ item }: { item: BudgetPlanScheduledItem }) => {
+  const base = baseCurrency.value?.currencyCode;
+  if (!item.currencyCode || !base || item.currencyCode === base) return formatBaseCurrency(item.amount);
+  return formatAmountByCurrencyCode(item.nativeAmount, item.currencyCode);
+};
+
+const rowConverted = ({ item }: { item: BudgetPlanScheduledItem }) => {
+  const base = baseCurrency.value?.currencyCode;
+  if (!item.currencyCode || !base || item.currencyCode === base) return null;
+  return formatBaseCurrency(item.amount);
+};
 </script>
 
 <template>
@@ -56,7 +76,10 @@ const formatDate = ({ date }: { date: string }) => format(parseISO(date), 'd MMM
         <div class="flex justify-between gap-3">
           <span class="truncate">{{ item.name }}</span>
           <span :class="cn('shrink-0 tabular-nums', amountToneClass({ amount: item.amount }))">
-            {{ formatBaseCurrency(item.amount) }}
+            {{ rowNative({ item }) }}
+            <span v-if="rowConverted({ item })" class="text-muted-foreground text-xs font-normal">
+              ≈ {{ rowConverted({ item }) }}
+            </span>
           </span>
         </div>
         <div class="text-muted-foreground flex min-w-0 items-center gap-1 text-xs">
