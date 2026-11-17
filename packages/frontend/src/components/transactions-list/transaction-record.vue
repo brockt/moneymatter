@@ -317,7 +317,7 @@ import {
   isAccountScopedPaymentRow,
 } from '@/components/dialogs/manage-transaction/utils/payment-legs';
 import { formatUIAmount } from '@/js/helpers';
-import { useAccountsStore, useCategoriesStore, useUserStore } from '@/stores';
+import { useAccountsStore, useCategoriesStore, useCurrenciesStore, useUserStore } from '@/stores';
 import {
   isTwoLegTransfer,
   ACCOUNT_CATEGORIES,
@@ -398,6 +398,7 @@ const props = withDefaults(
 );
 
 const { categoriesMap } = storeToRefs(useCategoriesStore());
+const { baseCurrency } = storeToRefs(useCurrenciesStore());
 const accountsStore = useAccountsStore();
 const { accountsRecord } = storeToRefs(accountsStore);
 const { user: currentUser } = storeToRefs(useUserStore());
@@ -544,10 +545,20 @@ const checkedModel = computed({
 });
 
 const formattedAmount = computed(() => {
-  let { amount } = getPaymentRowAmounts({ transaction: transaction.value });
+  let { amount, refAmount } = getPaymentRowAmounts({ transaction: transaction.value });
 
   if (transaction.value.transactionType === TRANSACTION_TYPES.expense) {
     amount *= -1;
+    refAmount *= -1;
+  }
+
+  // Past transactions: the cost that matters is the base-currency one, so
+  // foreign-currency rows show the converted amount (the native amount stays
+  // visible in the transaction details). Rows recorded without an exchange
+  // rate (refAmount 0) keep the native amount rather than showing a fake 0.
+  const base = baseCurrency.value?.currencyCode;
+  if (base && props.tx.currencyCode !== base && refAmount) {
+    return formatUIAmount(refAmount, { currency: base });
   }
 
   return formatUIAmount(amount, {
