@@ -382,6 +382,8 @@
       "spentOfTotal": "{spent} of {total}",
       "daysLeft": "{n}d left",
       "scheduled": "Scheduled",
+      "recentTransactions": "Recent transactions",
+      "noRecentTransactions": "No recent transactions",
       "nextOn": "Next on {date}",
       "scheduledCount": "{count} scheduled",
       "outflows": "Outflows",

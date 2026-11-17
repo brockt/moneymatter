@@ -1,6 +1,6 @@
 import { useLocalStorage } from '@vueuse/core';
 
-const PANEL_SECTIONS = ['breakdown', 'coverage', 'goals', 'scheduled', 'trend', 'pace', 'goal'] as const;
+const PANEL_SECTIONS = ['breakdown', 'coverage', 'goals', 'scheduled', 'trend', 'pace', 'goal', 'recent'] as const;
 
 export type PanelSection = (typeof PANEL_SECTIONS)[number];
 

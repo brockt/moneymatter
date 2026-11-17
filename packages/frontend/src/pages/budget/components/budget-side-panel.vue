@@ -20,6 +20,7 @@ import {
   CalendarClockIcon,
   ChartColumnIcon,
   GaugeIcon,
+  HistoryIcon,
   TargetIcon,
   XIcon,
 } from '@lucide/vue';
@@ -42,6 +43,7 @@ import PanelCoverageSection from './panel-coverage-section.vue';
 import PanelGoalSection from './panel-goal-section.vue';
 import PanelGoalsSection from './panel-goals-section.vue';
 import PanelPaceSection from './panel-pace-section.vue';
+import PanelRecentTransactionsSection from './panel-recent-transactions-section.vue';
 import PanelScheduledSection from './panel-scheduled-section.vue';
 import { type PanelSection, usePanelSections } from '../composables/use-panel-sections';
 import PanelTrendSection from './panel-trend-section.vue';
@@ -107,6 +109,10 @@ const scheduled = computed(() =>
   scheduledData.value ? scheduledForLines({ scheduled: scheduledData.value, lineIds: lineIds.value }) : undefined,
 );
 
+// The recent-transactions section only makes sense for a concrete selection;
+// the period overview has no categories to filter on.
+const hasLineCategories = computed(() => props.lines.some((entry) => entry.categoryIds.length > 0));
+
 const context = computed<PanelContext>(() => ({
   planId: props.planId,
   cadence: props.cadence,
@@ -145,6 +151,15 @@ const sections = computed(() => {
       titleKey: 'budgetPlans.panel.scheduled',
       component: PanelScheduledSection,
       hidden: isPast.value || !scheduled.value || (props.lines.length > 0 && !scheduled.value.items.length),
+    },
+    {
+      key: 'recent',
+      icon: HistoryIcon,
+      iconClass: 'bg-app-expense-color/15 text-app-expense-color',
+      titleKey: 'budgetPlans.panel.recentTransactions',
+      component: PanelRecentTransactionsSection,
+      props: { lines: props.lines },
+      hidden: !hasLineCategories.value,
     },
     {
       key: 'trend',
