@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { loadTransactions } from '@/api/transactions';
+import { VUE_QUERY_CACHE_KEYS } from '@/common/const';
 import { Button } from '@/components/lib/ui/button';
 import TransactionRecordSkeleton from '@/components/transactions-list/transaction-record-skeleton.vue';
 import TransactionsList from '@/components/transactions-list/transactions-list.vue';
@@ -7,7 +9,9 @@ import { cn } from '@/lib/utils';
 import { ROUTES_NAMES } from '@/routes/constants';
 import { useCategoriesStore } from '@/stores';
 import type { BudgetPlanLineTransactions, BudgetPlanPeriodViewLine } from '@bt/shared/types';
+import { SORT_DIRECTIONS, TRANSACTION_SORT_FIELD } from '@bt/shared/types';
 import { ArrowRightIcon } from '@lucide/vue';
+import { useQuery } from '@tanstack/vue-query';
 import { format, parseISO, subDays } from 'date-fns';
 import { storeToRefs } from 'pinia';
 import { computed } from 'vue';
@@ -16,6 +20,10 @@ import { type PanelContext, amountToneClass } from '../helpers';
 import { expandCategoryIds } from '../line-categories';
 
 const SKELETON_ROWS = 3;
+// A subscription only charges once per budget period, so the current-period
+// query cannot show price changes. Keep a short tail of older rows in the same
+// card, using the very same row component as the period transactions.
+const HISTORY_LIMIT = 12;
 
 const props = defineProps<{
   context: PanelContext;
@@ -41,6 +49,31 @@ const seeAllLink = computed(() => ({
     end: format(subDays(parseISO(props.context.period.endDate), 1), 'yyyy-MM-dd'),
   },
 }));
+
+const historyCategoryIds = computed(() =>
+  expandCategoryIds({ categoryIds: props.line.categoryIds, categories: formattedCategories.value }),
+);
+const historyQuery = useQuery({
+  queryKey: computed(() => [...VUE_QUERY_CACHE_KEYS.categoryTransactionHistory, historyCategoryIds.value]),
+  queryFn: () =>
+    loadTransactions({
+      categoryIds: historyCategoryIds.value,
+      limit: HISTORY_LIMIT,
+      sortBy: TRANSACTION_SORT_FIELD.time,
+      order: SORT_DIRECTIONS.desc,
+      isPlanned: false,
+      excludeBalanceAdjustments: true,
+    }),
+  enabled: computed(() => historyCategoryIds.value.length > 0),
+});
+
+// One continuous list: this period's rows first, then older charges. Drop ids
+// that the period query already returned so nothing is shown twice.
+const shownIds = computed(() => new Set((props.data?.transactions ?? []).map((tx) => tx.id)));
+const rows = computed(() => [
+  ...(props.data?.transactions ?? []),
+  ...(historyQuery.data.value ?? []).filter((tx) => !shownIds.value.has(tx.id)),
+]);
 </script>
 
 <template>
@@ -48,21 +81,21 @@ const seeAllLink = computed(() => ({
     <TransactionRecordSkeleton v-for="index in SKELETON_ROWS" :key="index" compact />
   </div>
 
-  <p v-else-if="!data?.total" class="text-muted-foreground text-sm">
+  <p v-else-if="!data?.total && !rows.length" class="text-muted-foreground text-sm">
     {{ $t('budgetPlans.panel.lineTransactions.empty') }}
   </p>
 
   <div v-else class="grid gap-3 text-sm">
     <div class="flex min-w-0 items-center justify-between gap-2">
       <span class="bg-muted shrink-0 rounded-full px-2 py-0.5 text-xs font-medium">
-        {{ $t('budgetPlans.panel.transactionCount', { count: data.total }) }}
+        {{ $t('budgetPlans.panel.transactionCount', { count: data?.total ?? 0 }) }}
       </span>
       <span :class="cn('font-semibold tabular-nums', amountToneClass({ amount: line.activity }))">
         {{ formatBaseCurrency(line.activity) }}
       </span>
     </div>
 
-    <TransactionsList :transactions="data.transactions" :paginate="false" raw-list disable-grouping compact />
+    <TransactionsList :transactions="rows" :paginate="false" raw-list disable-grouping compact />
 
     <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
       <span v-if="remaining > 0" class="text-muted-foreground">

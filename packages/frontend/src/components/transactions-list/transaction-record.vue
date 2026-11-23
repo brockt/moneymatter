@@ -301,7 +301,7 @@
           transaction.transactionType === TRANSACTION_TYPES.expense && 'text-app-expense-color',
         ]"
       >
-        <CurrencyAmount :amount="signedRowAmount" :owner="tx" />
+        <CurrencyAmount :amount="signedRowAmount.amount" :owner="signedRowAmount.owner" />
       </div>
     </div>
     <div v-else>
@@ -312,7 +312,7 @@
           transaction.transactionType === TRANSACTION_TYPES.expense && 'text-app-expense-color',
         ]"
       >
-        <CurrencyAmount :amount="signedRowAmount" :owner="tx" />
+        <CurrencyAmount :amount="signedRowAmount.amount" :owner="signedRowAmount.owner" />
       </div>
       <div v-if="formattedPaymentShare" class="text-muted-foreground text-amount text-right text-xs">
         ≈ {{ formattedPaymentShare }}
@@ -347,7 +347,7 @@ import {
   isAccountScopedPaymentRow,
 } from '@/components/dialogs/manage-transaction/utils/payment-legs';
 import { formatUIAmount } from '@/js/helpers';
-import { useAccountsStore, useCategoriesStore, useUserStore } from '@/stores';
+import { useAccountsStore, useCategoriesStore, useCurrenciesStore, useUserStore } from '@/stores';
 import {
   isTwoLegTransfer,
   ACCOUNT_CATEGORIES,
@@ -428,6 +428,7 @@ const props = withDefaults(
 );
 
 const { categoriesMap } = storeToRefs(useCategoriesStore());
+const { baseCurrency } = storeToRefs(useCurrenciesStore());
 const accountsStore = useAccountsStore();
 const { accountsRecord } = storeToRefs(accountsStore);
 const { user: currentUser } = storeToRefs(useUserStore());
@@ -573,9 +574,22 @@ const checkedModel = computed({
   },
 });
 
+// Past transactions: the cost that matters is the base-currency one, so a
+// foreign-currency row shows the converted amount (the native amount stays
+// visible in the transaction details). Rows recorded without an exchange rate
+// (refAmount 0) keep the native amount rather than showing a fake 0.
 const signedRowAmount = computed(() => {
-  const { amount } = getPaymentRowAmounts({ transaction: transaction.value });
-  return transaction.value.transactionType === TRANSACTION_TYPES.expense ? -amount : amount;
+  let { amount, refAmount } = getPaymentRowAmounts({ transaction: transaction.value });
+
+  if (transaction.value.transactionType === TRANSACTION_TYPES.expense) {
+    amount *= -1;
+    refAmount *= -1;
+  }
+
+  const base = baseCurrency.value?.currencyCode;
+  return base && props.tx.currencyCode !== base && refAmount
+    ? { amount: refAmount, owner: { currencyCode: base } }
+    : { amount, owner: props.tx };
 });
 
 // A part shown on its own account, in a currency other than the payment's.

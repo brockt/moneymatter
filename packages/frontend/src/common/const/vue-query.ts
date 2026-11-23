@@ -177,6 +177,8 @@ export const VUE_QUERY_CACHE_KEYS = Object.freeze({
   budgetPlanTrends: [...budgetPlans, 'trends'] as const,
   budgetPlanScheduled: [...budgetPlans, 'scheduled'] as const,
   budgetPlanLineTransactions: [...budgetPlans, 'line-transactions'] as const,
+  // append the categoryIds actually shown: [...budgetPlans, 'category-transaction-history', categoryIds]
+  categoryTransactionHistory: [...budgetPlans, 'category-transaction-history'] as const,
   budgetSuggestionContext: [...budgetPlans, 'suggestion-context'] as const,
 
   goals,
