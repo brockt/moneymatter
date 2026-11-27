@@ -210,7 +210,13 @@ const formatRowAmount = ({ sub }: { sub: SubscriptionListItem }) => {
 const formatRowBaseAmount = ({ sub }: { sub: SubscriptionListItem }) => {
   const { expectedAmount, expectedCurrencyCode } = sub;
   const base = baseCurrency.value?.currencyCode;
-  if (areAmountsHidden.value || expectedAmount == null || !expectedCurrencyCode || !base || expectedCurrencyCode === base) {
+  if (
+    areAmountsHidden.value ||
+    expectedAmount == null ||
+    !expectedCurrencyCode ||
+    !base ||
+    expectedCurrencyCode === base
+  ) {
     return null;
   }
   const converted = convert({ amount: expectedAmount, from: expectedCurrencyCode, to: base });
@@ -417,7 +423,10 @@ function payPeriod({ subscription }: { subscription: SubscriptionListItem }) {
             </router-link>
             <span class="text-amount shrink-0 text-sm" :class="getTransactionTypeStyles(sub.transactionType, '')">
               {{ formatRowAmount({ sub }) }}
-              <span v-if="formatRowBaseAmount({ sub })" class="text-muted-foreground whitespace-nowrap text-xs font-normal">
+              <span
+                v-if="formatRowBaseAmount({ sub })"
+                class="text-muted-foreground text-xs font-normal whitespace-nowrap"
+              >
                 ≈ {{ formatRowBaseAmount({ sub }) }}
               </span>
             </span>

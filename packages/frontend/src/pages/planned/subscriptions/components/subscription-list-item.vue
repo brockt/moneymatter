@@ -164,7 +164,10 @@ const due = computed<{ label: string; chipClass: string } | null>(() => {
       "
     >
       {{ maskAmountText({ text: `${getTransactionTypePrefix(subscription.transactionType)}${formattedAmount}` }) }}
-      <span v-if="baseCurrencyAmount && !areAmountsHidden" class="text-muted-foreground ml-1 whitespace-nowrap text-xs font-normal">
+      <span
+        v-if="baseCurrencyAmount && !areAmountsHidden"
+        class="text-muted-foreground ml-1 text-xs font-normal whitespace-nowrap"
+      >
         ≈ {{ baseCurrencyAmount }}
       </span>
     </span>
