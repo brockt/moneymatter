@@ -11,10 +11,13 @@ import {
 } from '@/components/common/dropdown-menu';
 import Button from '@/components/lib/ui/button/Button.vue';
 import { DesktopOnlyTooltip } from '@/components/lib/ui/tooltip';
+import { useExchangeRates } from '@/composable/data-queries/currencies';
 import { useFormatCurrency } from '@/composable/formatters';
-import { maskAmountText } from '@/js/helpers/formatters';
+import { areAmountsHidden, maskAmountText } from '@/js/helpers/formatters';
 import { cn } from '@/lib/utils';
+import { useCurrenciesStore } from '@/stores';
 import { CheckIcon, CirclePauseIcon, MoreHorizontalIcon, RepeatIcon, Trash2Icon } from '@lucide/vue';
+import { storeToRefs } from 'pinia';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -38,12 +41,25 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const { formatAmountByCurrencyCode } = useFormatCurrency();
+const { formatAmountByCurrencyCode, formatBaseCurrency } = useFormatCurrency();
+const { baseCurrency } = storeToRefs(useCurrenciesStore());
+const { convert } = useExchangeRates();
 
 const formattedAmount = computed<string | null>(() => {
   const { expectedAmount, expectedCurrencyCode } = props.subscription;
   if (!expectedAmount || !expectedCurrencyCode) return null;
   return formatAmountByCurrencyCode({ amount: expectedAmount, currencyCode: expectedCurrencyCode });
+});
+
+// Equivalent in the user's base currency (e.g. a USD bill shown in CAD).
+// Null when the bill is already in the base currency or no rate is available —
+// the suffix is then omitted rather than rendered with a placeholder.
+const baseCurrencyAmount = computed<string | null>(() => {
+  const { expectedAmount, expectedCurrencyCode } = props.subscription;
+  const baseCode = baseCurrency.value?.currencyCode;
+  if (!expectedAmount || !expectedCurrencyCode || !baseCode || expectedCurrencyCode === baseCode) return null;
+  const converted = convert({ amount: expectedAmount, from: expectedCurrencyCode, to: baseCode });
+  return converted == null ? null : formatBaseCurrency(converted);
 });
 
 // A finished installment (completedAt set) reads as "Completed", distinct from a
@@ -148,6 +164,12 @@ const due = computed<{ label: string; chipClass: string } | null>(() => {
       "
     >
       {{ maskAmountText({ text: `${getTransactionTypePrefix(subscription.transactionType)}${formattedAmount}` }) }}
+      <span
+        v-if="baseCurrencyAmount && !areAmountsHidden"
+        class="text-muted-foreground ml-1 text-xs font-normal whitespace-nowrap"
+      >
+        ≈ {{ baseCurrencyAmount }}
+      </span>
     </span>
 
     <!-- Due status: renders for every item with a usable next due date -->

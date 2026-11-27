@@ -76,7 +76,8 @@ import {
   lineIdsWithHistory,
   movableLines,
   periodProgress,
-  sumLineTotals,
+  totalsForDisplay,
+  viewTotalsForDisplay,
 } from './helpers';
 
 const { t } = useI18n();
@@ -323,13 +324,25 @@ const pickDrawerLineAction = ({ action }: { action: LineAction }) => {
   gridRef.value?.pickMenuAction({ line, action });
 };
 
-const selectionAvailable = computed(
-  () => sumLineTotals({ lines: selectedLines.value, decimals: baseCurrencyDecimals.value }).available,
-);
+const selectionAvailable = computed(() => {
+  if (!view.value || !selectedLines.value.length) return 0;
+  return totalsForDisplay({
+    lines: selectedLines.value,
+    isCurrent: view.value.period.isCurrent,
+    hasPool: view.value.pool !== null,
+    decimals: baseCurrencyDecimals.value,
+  }).available;
+});
 const panelTabAvailable = computed(() =>
-  selectedLines.value.length ? selectionAvailable.value : (view.value?.header.totalAvailable ?? 0),
+  selectedLines.value.length
+    ? selectionAvailable.value
+    : view.value
+      ? viewTotalsForDisplay({ view: view.value, decimals: baseCurrencyDecimals.value }).available
+      : 0,
 );
-const overviewStats = computed(() => (view.value ? headerStats({ view: view.value }) : undefined));
+const overviewStats = computed(() =>
+  view.value ? headerStats({ view: view.value, decimals: baseCurrencyDecimals.value }) : undefined,
+);
 
 onKeyStroke('Escape', (event) => {
   // Escape inside a popover, menu or field belongs to that control.

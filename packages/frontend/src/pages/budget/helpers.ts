@@ -261,27 +261,39 @@ export const sumOverspent = ({ lines }: { lines: { available: number }[] }): { t
 };
 
 /** The four period figures shown in the summary strip and the mobile overview. */
-export const headerStats = ({ view }: { view: Pick<BudgetPlanPeriodView, 'header' | 'lines'> }) => {
-  const overspent = sumOverspent({ lines: view.lines });
+export const headerStats = ({
+  view,
+  decimals,
+}: {
+  view: Pick<BudgetPlanPeriodView, 'header' | 'lines' | 'pool' | 'period'>;
+  decimals: number;
+}) => {
+  const displayArgs = { isCurrent: view.period.isCurrent, hasPool: view.pool !== null };
+  const linesForDisplay =
+    displayArgs.hasPool && !displayArgs.isCurrent
+      ? view.lines.map((line) => ({ available: availableForDisplay({ line, ...displayArgs }) }))
+      : view.lines;
+  const overspent = sumOverspent({ lines: linesForDisplay });
+  const totals = viewTotalsForDisplay({ view, decimals });
   return {
     overspentLineCount: overspent.lineCount,
     stats: [
       {
         key: 'assigned',
         labelKey: 'budgetPlans.tiles.assigned',
-        amount: view.header.totalAssigned,
+        amount: totals.assigned,
         toned: false,
       },
       {
         key: 'spent',
         labelKey: 'budgetPlans.tiles.spent',
-        amount: -view.header.totalActivity,
+        amount: -totals.activity || 0,
         toned: false,
       },
       {
         key: 'available',
         labelKey: 'budgetPlans.tiles.available',
-        amount: view.header.totalAvailable,
+        amount: totals.available,
         toned: true,
       },
       {
@@ -978,6 +990,39 @@ export type LineAverages = NonNullable<ReturnType<typeof lineAverages>>;
 export const isPastPeriod = ({ period, now = new Date() }: { period: Pick<BudgetPlanPeriod, 'endDate'>; now?: Date }) =>
   period.endDate <= format(now, 'yyyy-MM-dd');
 
+/** A future pool baseline is a plan, not money set aside: show `—` until an amount is written in that period. */
+export const isPlanOnlyAssigned = ({
+  line,
+  isCurrent,
+  hasPool,
+}: {
+  line: Pick<BudgetPlanPeriodViewLine, 'assigned' | 'poolAssigned'>;
+  isCurrent: boolean;
+  hasPool: boolean;
+}) => hasPool && !isCurrent && line.assigned !== 0 && line.poolAssigned === 0;
+
+/** Assigned amount to show: only pool-committed money in future periods. */
+export const assignedForDisplay = ({
+  line,
+  isCurrent,
+  hasPool,
+}: {
+  line: Pick<BudgetPlanPeriodViewLine, 'assigned' | 'poolAssigned'>;
+  isCurrent: boolean;
+  hasPool: boolean;
+}) => (hasPool && !isCurrent ? line.poolAssigned : line.assigned);
+
+/** Available amount to show: a hidden future baseline must not leave hidden money behind. */
+export const availableForDisplay = ({
+  line,
+  isCurrent,
+  hasPool,
+}: {
+  line: Pick<BudgetPlanPeriodViewLine, 'assigned' | 'poolAssigned' | 'available'>;
+  isCurrent: boolean;
+  hasPool: boolean;
+}) => (hasPool && !isCurrent ? line.available - (line.assigned - line.poolAssigned) : line.available);
+
 export const scheduledForLines = ({
   scheduled,
   lineIds,
@@ -1491,6 +1536,46 @@ export const sumLineTotals = ({ lines, decimals }: { lines: LineAmounts[]; decim
     activity: sum({ key: 'activity' }),
     available: sum({ key: 'available' }),
   };
+};
+
+/** Grid-visible line totals, including the future-pool baseline hide rule. */
+export const totalsForDisplay = ({
+  lines,
+  isCurrent,
+  hasPool,
+  decimals,
+}: {
+  lines: Pick<BudgetPlanPeriodViewLine, 'carriedIn' | 'assigned' | 'poolAssigned' | 'activity' | 'available'>[];
+  isCurrent: boolean;
+  hasPool: boolean;
+  decimals: number;
+}) => {
+  if (!hasPool || isCurrent) return sumLineTotals({ lines, decimals });
+  const sum = (valueOf: (line: (typeof lines)[number]) => number) =>
+    trimAmountNoise({ value: lines.reduce((total, line) => total + valueOf(line), 0), decimals }) || 0;
+  return {
+    carriedIn: sum((line) => line.carriedIn),
+    assigned: sum((line) => assignedForDisplay({ line, isCurrent, hasPool })),
+    activity: sum((line) => line.activity),
+    available: sum((line) => availableForDisplay({ line, isCurrent, hasPool })),
+  };
+};
+
+/** Period totals matching the amounts shown in the grid and summary strip. */
+export const viewTotalsForDisplay = ({
+  view,
+  decimals,
+}: {
+  view: Pick<BudgetPlanPeriodView, 'header' | 'lines' | 'pool' | 'period'>;
+  decimals: number;
+}) => {
+  const isCurrent = view.period.isCurrent;
+  const hasPool = view.pool !== null;
+  if (!hasPool || isCurrent) {
+    const { totalCarriedIn, totalAssigned, totalActivity, totalAvailable } = view.header;
+    return { carriedIn: totalCarriedIn, assigned: totalAssigned, activity: totalActivity, available: totalAvailable };
+  }
+  return totalsForDisplay({ lines: view.lines, isCurrent, hasPool, decimals });
 };
 
 interface LayoutLine {

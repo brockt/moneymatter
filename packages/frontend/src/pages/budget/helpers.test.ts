@@ -50,6 +50,9 @@ import {
   headerStats,
   isAttachableAccount,
   isPastPeriod,
+  isPlanOnlyAssigned,
+  assignedForDisplay,
+  availableForDisplay,
   isValidCustomInterval,
   isValidPlanStart,
   layoutStateFrom,
@@ -74,6 +77,7 @@ import {
   trendPaddingStarts,
   trendBars,
   sumLineTotals,
+  totalsForDisplay,
   sumOverspent,
   takeBackCandidates,
   validateGoalEditor,
@@ -1095,6 +1099,44 @@ describe('isPastPeriod', () => {
   });
 });
 
+describe('future assigned display', () => {
+  const args = { isCurrent: false, hasPool: true };
+
+  it('hides an inherited baseline but keeps an explicitly written amount', () => {
+    const baseline = { assigned: 83.11, poolAssigned: 0, available: 83.11 };
+    const negativeBaseline = { assigned: -12.5, poolAssigned: 0, available: -12.5 };
+    const explicit = { assigned: 18, poolAssigned: 18, available: 18 };
+    expect(isPlanOnlyAssigned({ line: baseline, ...args })).toBe(true);
+    expect(isPlanOnlyAssigned({ line: negativeBaseline, ...args })).toBe(true);
+    expect(isPlanOnlyAssigned({ line: explicit, ...args })).toBe(false);
+    expect(assignedForDisplay({ line: baseline, ...args })).toBe(0);
+    expect(assignedForDisplay({ line: negativeBaseline, ...args })).toBe(0);
+    expect(assignedForDisplay({ line: explicit, ...args })).toBe(18);
+    expect(availableForDisplay({ line: baseline, ...args })).toBe(0);
+    expect(availableForDisplay({ line: negativeBaseline, ...args })).toBe(0);
+    expect(availableForDisplay({ line: explicit, ...args })).toBe(18);
+  });
+
+  it('leaves the current period and non-pool plans alone', () => {
+    const line = { assigned: 83.11, poolAssigned: 0, available: 83.11 };
+    expect(isPlanOnlyAssigned({ line, ...args, isCurrent: true })).toBe(false);
+    expect(isPlanOnlyAssigned({ line, ...args, hasPool: false })).toBe(false);
+    expect(assignedForDisplay({ line, ...args, isCurrent: true })).toBe(83.11);
+    expect(assignedForDisplay({ line, ...args, hasPool: false })).toBe(83.11);
+    expect(availableForDisplay({ line, ...args, isCurrent: true })).toBe(83.11);
+    expect(availableForDisplay({ line, ...args, hasPool: false })).toBe(83.11);
+  });
+
+  it('subtracts a hidden baseline from available but keeps real activity and carry-in', () => {
+    expect(
+      availableForDisplay({
+        line: { assigned: 20, poolAssigned: 0, available: 13.5 },
+        ...args,
+      }),
+    ).toBe(-6.5);
+  });
+});
+
 describe('scheduledForLines', () => {
   const item = ({ id, date, amount, lineId }: Pick<BudgetPlanScheduledItem, 'id' | 'date' | 'amount' | 'lineId'>) =>
     ({
@@ -1692,7 +1734,10 @@ describe('headerStats', () => {
       view: {
         header: { totalAssigned: 500, totalActivity: -320, totalAvailable: 180 },
         lines: [{ available: -20 }, { available: 250 }, { available: -50 }],
+        pool: null,
+        period: { isCurrent: true },
       } as Parameters<typeof headerStats>[0]['view'],
+      decimals: 2,
     });
     expect(result.overspentLineCount).toBe(2);
     expect(result.stats.map(({ key, amount, toned }) => ({ key, amount, toned }))).toEqual([
@@ -1700,6 +1745,29 @@ describe('headerStats', () => {
       { key: 'spent', amount: 320, toned: false },
       { key: 'available', amount: 180, toned: true },
       { key: 'overspent', amount: -70, toned: true },
+    ]);
+  });
+
+  it('uses displayed amounts for a future pool period', () => {
+    const result = headerStats({
+      view: {
+        header: { totalAssigned: 83.11, totalActivity: 0, totalAvailable: 83.11 },
+        lines: [
+          { carriedIn: 0, assigned: 83.11, poolAssigned: 0, activity: 0, available: 83.11 },
+          { carriedIn: 0, assigned: -12.5, poolAssigned: 0, activity: 0, available: -12.5 },
+          { carriedIn: 0, assigned: 18, poolAssigned: 18, activity: 0, available: 18 },
+        ],
+        pool: {},
+        period: { isCurrent: false },
+      } as Parameters<typeof headerStats>[0]['view'],
+      decimals: 2,
+    });
+    expect(result.overspentLineCount).toBe(0);
+    expect(result.stats.map(({ key, amount }) => ({ key, amount }))).toEqual([
+      { key: 'assigned', amount: 18 },
+      { key: 'spent', amount: 0 },
+      { key: 'available', amount: 18 },
+      { key: 'overspent', amount: 0 },
     ]);
   });
 });
@@ -1719,6 +1787,26 @@ describe('sumLineTotals', () => {
 
   it('returns zeros for no lines', () => {
     expect(sumLineTotals({ lines: [], decimals: 2 })).toEqual({ carriedIn: 0, assigned: 0, activity: 0, available: 0 });
+  });
+
+  it('hides future pool baselines in assigned and available totals', () => {
+    const lines = [
+      { carriedIn: 0, assigned: 83.11, poolAssigned: 0, activity: 0, available: 83.11 },
+      { carriedIn: 11.09, assigned: 0, poolAssigned: 0, activity: 0, available: 11.09 },
+      { carriedIn: 0, assigned: 18, poolAssigned: 18, activity: -3, available: 15 },
+    ];
+    expect(totalsForDisplay({ lines, isCurrent: false, hasPool: true, decimals: 2 })).toEqual({
+      carriedIn: 11.09,
+      assigned: 18,
+      activity: -3,
+      available: 26.09,
+    });
+    expect(totalsForDisplay({ lines, isCurrent: true, hasPool: true, decimals: 2 })).toEqual({
+      carriedIn: 11.09,
+      assigned: 101.11,
+      activity: -3,
+      available: 109.2,
+    });
   });
 
   it('rounds float residue to a positive zero', () => {

@@ -22,15 +22,16 @@ import { useNotificationCenter } from '@/components/notification-center';
 import TransactionDetailsModal from '@/components/transactions-list/transaction-details-modal.vue';
 import { useManageTransactionDialog } from '@/components/transactions-list/use-manage-transaction-dialog';
 import TransactionRecord from '@/components/transactions-list/transaction-record.vue';
+import { useExchangeRates } from '@/composable/data-queries/currencies';
 import { usePayeeLookup } from '@/composable/data-queries/payees';
 import { useInvalidateSubscriptionQueries } from '@/composable/data-queries/subscriptions';
 import { CUSTOM_BREAKPOINTS, useWindowBreakpoints } from '@/composable/window-breakpoints';
 import { useFormatCurrency } from '@/composable/formatters';
 import { ApiErrorResponseError, isNotFoundError } from '@/js/errors';
-import { maskAmountText } from '@/js/helpers/formatters';
+import { areAmountsHidden, maskAmountText } from '@/js/helpers/formatters';
 import { captureException } from '@/lib/sentry';
 import { ROUTES_NAMES } from '@/routes';
-import { useTagsStore } from '@/stores';
+import { useCurrenciesStore, useTagsStore } from '@/stores';
 import {
   SUBSCRIPTION_PERIOD_STATUSES,
   SUBSCRIPTION_TYPES,
@@ -53,6 +54,7 @@ import {
   UndoIcon,
   UnlinkIcon,
 } from '@lucide/vue';
+import { storeToRefs } from 'pinia';
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
@@ -80,7 +82,9 @@ const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
 const { addSuccessNotification, addErrorNotification } = useNotificationCenter();
-const { formatAmountByCurrencyCode } = useFormatCurrency();
+const { formatAmountByCurrencyCode, formatBaseCurrency } = useFormatCurrency();
+const { baseCurrency } = storeToRefs(useCurrenciesStore());
+const { convert } = useExchangeRates();
 
 const subscriptionId = computed(() => route.params.id as string);
 
@@ -214,6 +218,19 @@ const formattedAmount = computed(() => {
   return maskAmountText({
     text: `${getTransactionTypePrefix(sub.transactionType)}${formatAmountByCurrencyCode({ amount: sub.expectedAmount, currencyCode: sub.expectedCurrencyCode })}`,
   });
+});
+
+// Equivalent in the user's base currency (e.g. a USD bill shown in CAD).
+// Null when the bill is already in the base currency or no rate is available —
+// the suffix is then omitted rather than rendered with a placeholder.
+const baseCurrencyAmount = computed(() => {
+  const sub = subscription.value;
+  const baseCode = baseCurrency.value?.currencyCode;
+  if (!sub?.expectedAmount || !sub.expectedCurrencyCode || !baseCode || sub.expectedCurrencyCode === baseCode) {
+    return null;
+  }
+  const converted = convert({ amount: sub.expectedAmount, from: sub.expectedCurrencyCode, to: baseCode });
+  return converted == null ? null : formatBaseCurrency(converted);
 });
 
 const remindersSummary = computed(() => {
@@ -604,6 +621,12 @@ async function openTransaction({ transactionId }: { transactionId: string }) {
               <dt class="text-muted-foreground">{{ $t('planned.subscriptions.amount') }}</dt>
               <dd class="text-right font-medium" :class="getTransactionTypeStyles(subscription.transactionType, '')">
                 {{ formattedAmount ?? '–' }}
+                <span
+                  v-if="baseCurrencyAmount && !areAmountsHidden"
+                  class="text-muted-foreground block text-xs font-normal"
+                >
+                  ≈ {{ baseCurrencyAmount }}
+                </span>
               </dd>
             </div>
             <div class="flex items-baseline justify-between gap-3">
