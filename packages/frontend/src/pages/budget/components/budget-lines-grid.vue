@@ -50,6 +50,7 @@ import {
   GRID_ROW_CLASS,
   type GoalPeriodUnit,
   amountToneClass,
+  availableForDisplay,
   availablePillClass,
   assignedForDisplay,
   goalCaption,
@@ -60,7 +61,7 @@ import {
   linesInGridOrder,
   movableLines,
   periodProgress,
-  sumLineTotals,
+  totalsForDisplay,
 } from '../helpers';
 import ArchivedLinesDialog from './archived-lines-dialog.vue';
 import AssignPopover from './assign-popover.vue';
@@ -113,6 +114,7 @@ const emit = defineEmits<{
 
 const [DefineAssignTrigger, AssignTrigger] = createReusableTemplate<{
   line: BudgetPlanPeriodViewLine;
+  displayLine: BudgetPlanPeriodViewLine;
   compact?: boolean;
 }>({ inheritAttrs: false });
 const [DefineArchivedTrigger, ArchivedTrigger] = createReusableTemplate();
@@ -188,7 +190,7 @@ const CHECKBOX_CLASS =
 
 const availableClass = ({ line }: { line: BudgetPlanPeriodViewLine }) =>
   availablePillClass({
-    amount: line.available,
+    amount: availableOf({ line }),
     underfunded: goalDisplays.value.get(line.lineId)?.kind === 'underfunded',
     ahead: linePaceOf({ line }).state === 'ahead',
   });
@@ -213,28 +215,30 @@ const targetHasHistory = ref(false);
 // Keyed per layout: the table row and the mobile card both render a menu for the same group.
 const openMenuKey = ref<string | null>(null);
 
-const assignedOf = ({ line }: { line: BudgetPlanPeriodViewLine }) =>
-  assignedForDisplay({
-    line,
-    isCurrent: props.view.period.isCurrent,
-    hasPool: props.view.pool !== null,
-  });
+const displayArgs = computed(() => ({
+  isCurrent: props.view.period.isCurrent,
+  hasPool: props.view.pool !== null,
+}));
 
-const isPlanOnly = ({ line }: { line: BudgetPlanPeriodViewLine }) =>
-  isPlanOnlyAssigned({
-    line,
-    isCurrent: props.view.period.isCurrent,
-    hasPool: props.view.pool !== null,
-  });
+const assignedOf = ({ line }: { line: BudgetPlanPeriodViewLine }) => assignedForDisplay({ line, ...displayArgs.value });
+
+const isPlanOnly = ({ line }: { line: BudgetPlanPeriodViewLine }) => isPlanOnlyAssigned({ line, ...displayArgs.value });
+
+const availableOf = ({ line }: { line: BudgetPlanPeriodViewLine }) =>
+  availableForDisplay({ line, ...displayArgs.value });
+
+const lineForDisplay = ({ line }: { line: BudgetPlanPeriodViewLine }) => ({
+  ...line,
+  assigned: assignedOf({ line }),
+  available: availableOf({ line }),
+});
 
 const assignedText = ({ line }: { line: BudgetPlanPeriodViewLine }) =>
   isPlanOnly({ line }) ? '—' : formatShortBaseCurrency({ amount: assignedOf({ line }) });
 
-const assignedTotal = ({ lines }: { lines: BudgetPlanPeriodViewLine[] }) =>
-  trimAmountNoise({
-    value: lines.reduce((total, line) => total + assignedOf({ line }), 0),
-    decimals: baseCurrencyDecimals.value,
-  }) || 0;
+const viewTotals = computed(() =>
+  totalsForDisplay({ lines: props.view.lines, ...displayArgs.value, decimals: baseCurrencyDecimals.value }),
+);
 
 const sections = computed(() => {
   const { ungrouped, groups } = groupLines({
@@ -245,10 +249,11 @@ const sections = computed(() => {
     ungrouped,
     groups: groups.map((section) => ({
       ...section,
-      totals: {
-        ...sumLineTotals({ lines: section.lines, decimals: baseCurrencyDecimals.value }),
-        assigned: assignedTotal({ lines: section.lines }),
-      },
+      totals: totalsForDisplay({
+        lines: section.lines,
+        ...displayArgs.value,
+        decimals: baseCurrencyDecimals.value,
+      }),
     })),
   };
 });
@@ -393,21 +398,21 @@ const archiveSelected = () => {
 
 <template>
   <div class="fields-plain">
-    <DefineAssignTrigger v-slot="{ line, compact }">
-      <AssignPopover :plan-id="planId" :period-id="view.period.id" :line="line">
+    <DefineAssignTrigger v-slot="{ line, displayLine, compact }">
+      <AssignPopover :plan-id="planId" :period-id="view.period.id" :line="displayLine">
         <Button
           variant="field"
           :size="compact ? 'xs' : 'sm'"
           :aria-label="
             $t('budgetPlans.grid.assignAmountFor', {
               name: line.name,
-              amount: formatBaseCurrency(assignedOf({ line })),
+              amount: formatBaseCurrency(assignedOf({ line: displayLine })),
             })
           "
           :class="
             cn(
               'w-full cursor-text justify-end px-2.5 tabular-nums',
-              assignedOf({ line }) === 0
+              assignedOf({ line: displayLine }) === 0
                 ? 'text-muted-foreground hover:text-muted-foreground'
                 : 'hover:text-foreground',
               compact && 'w-auto min-w-24',
@@ -659,17 +664,19 @@ const archiveSelected = () => {
         <div class="flex min-w-0 items-center gap-2">
           <GoalButton :line="line" />
           <SelectTrigger :line="line">
-            <NameCell :line="line" :display="goalDisplays.get(line.lineId)" />
+            <NameCell :line="lineForDisplay({ line })" :display="goalDisplays.get(line.lineId)" />
           </SelectTrigger>
         </div>
 
-        <AssignTrigger :line="line" />
+        <AssignTrigger :line="line" :display-line="lineForDisplay({ line })" />
 
         <span class="text-muted-foreground text-right text-sm tabular-nums">{{
           formatShortBaseCurrency({ amount: line.activity })
         }}</span>
         <span class="text-right">
-          <span :class="availableClass({ line })">{{ formatShortBaseCurrency({ amount: line.available }) }}</span>
+          <span :class="availableClass({ line })">{{
+            formatShortBaseCurrency({ amount: availableOf({ line }) })
+          }}</span>
         </span>
 
         <span v-if="archivedLineIds.has(line.lineId)" />
@@ -700,12 +707,14 @@ const archiveSelected = () => {
               {{ assignedText({ line }) }}
             </span>
             <span :class="MOBILE_AVAILABLE_CLASS">
-              <span :class="availableClass({ line })">{{ formatShortBaseCurrency({ amount: line.available }) }}</span>
+              <span :class="availableClass({ line })">{{
+                formatShortBaseCurrency({ amount: availableOf({ line }) })
+              }}</span>
             </span>
           </span>
-          <BudgetLineBars :line="line" :goal="goalDisplays.get(line.lineId)" :mode="rowBars" />
+          <BudgetLineBars :line="lineForDisplay({ line })" :goal="goalDisplays.get(line.lineId)" :mode="rowBars" />
           <BudgetLinePaceHint v-if="paceHint" :line="line" :days-left="daysLeft" />
-          <MobileCaption :line="line" :display="goalDisplays.get(line.lineId)" />
+          <MobileCaption :line="lineForDisplay({ line })" :display="goalDisplays.get(line.lineId)" />
         </SelectTrigger>
       </div>
     </DefineLineCard>
@@ -874,14 +883,12 @@ const archiveSelected = () => {
             </span>
             <ArchivedTrigger />
           </div>
-          <span class="text-right tabular-nums">{{
-            formatShortBaseCurrency({ amount: assignedTotal({ lines: view.lines }) })
-          }}</span>
+          <span class="text-right tabular-nums">{{ formatShortBaseCurrency({ amount: viewTotals.assigned }) }}</span>
           <span class="text-muted-foreground text-right tabular-nums">{{
-            formatShortBaseCurrency({ amount: view.header.totalActivity })
+            formatShortBaseCurrency({ amount: viewTotals.activity })
           }}</span>
-          <span :class="cn('text-right tabular-nums', amountToneClass({ amount: view.header.totalAvailable }))">
-            {{ formatShortBaseCurrency({ amount: view.header.totalAvailable }) }}
+          <span :class="cn('text-right tabular-nums', amountToneClass({ amount: viewTotals.available }))">
+            {{ formatShortBaseCurrency({ amount: viewTotals.available }) }}
           </span>
           <span />
         </div>

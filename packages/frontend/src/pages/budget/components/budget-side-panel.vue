@@ -37,13 +37,16 @@ import {
   type ScheduledCoverage,
   aggregatePace,
   amountToneClass,
+  assignedForDisplay,
+  availableForDisplay,
   formatPeriodLabel,
   isPastPeriod,
   lineAverages,
   scheduledCoverage,
   scheduledForLines,
-  sumLineTotals,
+  totalsForDisplay,
   TREND_PERIOD_COUNT,
+  viewTotalsForDisplay,
   TRENDS_FETCH_COUNT,
 } from '../helpers';
 import PanelAveragesSection from './panel-averages-section.vue';
@@ -96,11 +99,27 @@ const isArrangeOpen = ref(false);
 
 const line = computed(() => (props.lines.length === 1 ? props.lines[0] : undefined));
 const lineIds = computed(() => props.lines.map((entry) => entry.lineId));
+const displayArgs = computed(() => ({
+  isCurrent: props.view.period.isCurrent,
+  hasPool: props.view.pool !== null,
+}));
+
 const figures = computed(() => {
-  if (line.value) return line.value;
-  if (props.lines.length) return sumLineTotals({ lines: props.lines, decimals: baseCurrencyDecimals.value });
-  const { totalCarriedIn, totalAssigned, totalActivity, totalAvailable } = props.view.header;
-  return { carriedIn: totalCarriedIn, assigned: totalAssigned, activity: totalActivity, available: totalAvailable };
+  if (line.value) {
+    const current = line.value;
+    return {
+      ...current,
+      assigned: assignedForDisplay({ line: current, ...displayArgs.value }),
+      available: availableForDisplay({ line: current, ...displayArgs.value }),
+    };
+  }
+  if (props.lines.length)
+    return totalsForDisplay({
+      lines: props.lines,
+      ...displayArgs.value,
+      decimals: baseCurrencyDecimals.value,
+    });
+  return viewTotalsForDisplay({ view: props.view, decimals: baseCurrencyDecimals.value });
 });
 
 const periodLabel = computed(() => formatPeriodLabel({ ...props.view.period, locale: locale.value }));
