@@ -50,6 +50,8 @@ import {
   headerStats,
   isAttachableAccount,
   isPastPeriod,
+  isPlanOnlyAssigned,
+  assignedForDisplay,
   isValidCustomInterval,
   isValidPlanStart,
   layoutStateFrom,
@@ -1092,6 +1094,30 @@ describe('isPastPeriod', () => {
   it('counts a period as past from its exclusive end date', () => {
     expect(isPastPeriod({ period, now: new Date(2026, 8, 30, 23) })).toBe(false);
     expect(isPastPeriod({ period, now: new Date(2026, 9, 1) })).toBe(true);
+  });
+});
+
+describe('future assigned display', () => {
+  const args = { isCurrent: false, hasPool: true };
+
+  it('hides an inherited baseline but keeps an explicitly written amount', () => {
+    const baseline = { assigned: 83.11, poolAssigned: 0 };
+    const negativeBaseline = { assigned: -12.5, poolAssigned: 0 };
+    const explicit = { assigned: 18, poolAssigned: 18 };
+    expect(isPlanOnlyAssigned({ line: baseline, ...args })).toBe(true);
+    expect(isPlanOnlyAssigned({ line: negativeBaseline, ...args })).toBe(true);
+    expect(isPlanOnlyAssigned({ line: explicit, ...args })).toBe(false);
+    expect(assignedForDisplay({ line: baseline, ...args })).toBe(0);
+    expect(assignedForDisplay({ line: negativeBaseline, ...args })).toBe(0);
+    expect(assignedForDisplay({ line: explicit, ...args })).toBe(18);
+  });
+
+  it('leaves the current period and non-pool plans alone', () => {
+    const line = { assigned: 83.11, poolAssigned: 0 };
+    expect(isPlanOnlyAssigned({ line, ...args, isCurrent: true })).toBe(false);
+    expect(isPlanOnlyAssigned({ line, ...args, hasPool: false })).toBe(false);
+    expect(assignedForDisplay({ line, ...args, isCurrent: true })).toBe(83.11);
+    expect(assignedForDisplay({ line, ...args, hasPool: false })).toBe(83.11);
   });
 });
 

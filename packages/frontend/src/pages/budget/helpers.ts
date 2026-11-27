@@ -978,6 +978,28 @@ export type LineAverages = NonNullable<ReturnType<typeof lineAverages>>;
 export const isPastPeriod = ({ period, now = new Date() }: { period: Pick<BudgetPlanPeriod, 'endDate'>; now?: Date }) =>
   period.endDate <= format(now, 'yyyy-MM-dd');
 
+/** A future pool baseline is a plan, not money set aside: show `—` until an amount is written in that period. */
+export const isPlanOnlyAssigned = ({
+  line,
+  isCurrent,
+  hasPool,
+}: {
+  line: Pick<BudgetPlanPeriodViewLine, 'assigned' | 'poolAssigned'>;
+  isCurrent: boolean;
+  hasPool: boolean;
+}) => hasPool && !isCurrent && line.assigned !== 0 && line.poolAssigned === 0;
+
+/** Assigned amount to show: only pool-committed money in future periods. */
+export const assignedForDisplay = ({
+  line,
+  isCurrent,
+  hasPool,
+}: {
+  line: Pick<BudgetPlanPeriodViewLine, 'assigned' | 'poolAssigned'>;
+  isCurrent: boolean;
+  hasPool: boolean;
+}) => (hasPool && !isCurrent ? line.poolAssigned : line.assigned);
+
 export const scheduledForLines = ({
   scheduled,
   lineIds,

@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/lib/ui/checkbox';
 import { DesktopOnlyTooltip } from '@/components/lib/ui/tooltip';
 import { useNotificationCenter } from '@/components/notification-center';
 import { useFormatCurrency } from '@/composable';
+import { trimAmountNoise } from '@/js/helpers/currency-decimals';
 import { useInvalidatingMutation } from '@/composable/data-queries/use-invalidating-mutation';
 import { useAiAllowance } from '@/composable/use-ai-allowance';
 import { useQueryClient } from '@tanstack/vue-query';
@@ -50,9 +51,11 @@ import {
   type GoalPeriodUnit,
   amountToneClass,
   availablePillClass,
+  assignedForDisplay,
   goalCaption,
   goalStatusDisplay,
   groupLines,
+  isPlanOnlyAssigned,
   linePaceOf,
   linesInGridOrder,
   movableLines,
@@ -210,6 +213,29 @@ const targetHasHistory = ref(false);
 // Keyed per layout: the table row and the mobile card both render a menu for the same group.
 const openMenuKey = ref<string | null>(null);
 
+const assignedOf = ({ line }: { line: BudgetPlanPeriodViewLine }) =>
+  assignedForDisplay({
+    line,
+    isCurrent: props.view.period.isCurrent,
+    hasPool: props.view.pool !== null,
+  });
+
+const isPlanOnly = ({ line }: { line: BudgetPlanPeriodViewLine }) =>
+  isPlanOnlyAssigned({
+    line,
+    isCurrent: props.view.period.isCurrent,
+    hasPool: props.view.pool !== null,
+  });
+
+const assignedText = ({ line }: { line: BudgetPlanPeriodViewLine }) =>
+  isPlanOnly({ line }) ? '—' : formatShortBaseCurrency({ amount: assignedOf({ line }) });
+
+const assignedTotal = ({ lines }: { lines: BudgetPlanPeriodViewLine[] }) =>
+  trimAmountNoise({
+    value: lines.reduce((total, line) => total + assignedOf({ line }), 0),
+    decimals: baseCurrencyDecimals.value,
+  }) || 0;
+
 const sections = computed(() => {
   const { ungrouped, groups } = groupLines({
     lines: props.view.lines,
@@ -219,7 +245,10 @@ const sections = computed(() => {
     ungrouped,
     groups: groups.map((section) => ({
       ...section,
-      totals: sumLineTotals({ lines: section.lines, decimals: baseCurrencyDecimals.value }),
+      totals: {
+        ...sumLineTotals({ lines: section.lines, decimals: baseCurrencyDecimals.value }),
+        assigned: assignedTotal({ lines: section.lines }),
+      },
     })),
   };
 });
@@ -372,18 +401,20 @@ const archiveSelected = () => {
           :aria-label="
             $t('budgetPlans.grid.assignAmountFor', {
               name: line.name,
-              amount: formatBaseCurrency(line.assigned),
+              amount: formatBaseCurrency(assignedOf({ line })),
             })
           "
           :class="
             cn(
               'w-full cursor-text justify-end px-2.5 tabular-nums',
-              line.assigned === 0 ? 'text-muted-foreground hover:text-muted-foreground' : 'hover:text-foreground',
+              assignedOf({ line }) === 0
+                ? 'text-muted-foreground hover:text-muted-foreground'
+                : 'hover:text-foreground',
               compact && 'w-auto min-w-24',
             )
           "
         >
-          {{ formatShortBaseCurrency({ amount: line.assigned }) }}
+          {{ assignedText({ line }) }}
         </Button>
       </AssignPopover>
     </DefineAssignTrigger>
@@ -666,7 +697,7 @@ const archiveSelected = () => {
           <span class="flex min-w-0 items-center gap-3">
             <span class="min-w-0 flex-1"><LineName :line="line" /></span>
             <span :class="cn(MOBILE_ASSIGNED_CLASS, 'text-muted-foreground text-sm')">
-              {{ formatShortBaseCurrency({ amount: line.assigned }) }}
+              {{ assignedText({ line }) }}
             </span>
             <span :class="MOBILE_AVAILABLE_CLASS">
               <span :class="availableClass({ line })">{{ formatShortBaseCurrency({ amount: line.available }) }}</span>
@@ -844,7 +875,7 @@ const archiveSelected = () => {
             <ArchivedTrigger />
           </div>
           <span class="text-right tabular-nums">{{
-            formatShortBaseCurrency({ amount: view.header.totalAssigned })
+            formatShortBaseCurrency({ amount: assignedTotal({ lines: view.lines }) })
           }}</span>
           <span class="text-muted-foreground text-right tabular-nums">{{
             formatShortBaseCurrency({ amount: view.header.totalActivity })
